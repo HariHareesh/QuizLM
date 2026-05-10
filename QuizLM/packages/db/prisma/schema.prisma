@@ -1,0 +1,187 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
+  previewFeatures = ["typedSql"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  // Clerk user id
+  clerkUserId      String         @id
+  email            String         @unique
+  name             String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  createdQuestions QuestionMeta[]
+  tests            Test[]
+  testAttempts     TestAttempt[]
+
+  @@index([clerkUserId])
+}
+
+enum QuestionType {
+  MCQ
+  MULTI_MCQ
+  TRUE_FALSE
+  SHORT_ANSWER
+  LONG_ANSWER
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum Subject {
+  MATH
+  SCIENCE
+  HISTORY
+  LITERATURE
+  ART
+  TECHNOLOGY
+  OTHER
+}
+
+enum Level {
+  PRIMARY
+  SECONDARY
+  SENIOR_SECONDARY
+  UNDERGRADUATE
+  POSTGRADUATE
+  PROFESSIONAL
+}
+
+model Option {
+  id String @id @default(cuid())
+
+  option    String
+  isCorrect Boolean
+  imgUrl    String?
+
+  questionMetaId String
+  questionMeta   QuestionMeta @relation(fields: [questionMetaId], references: [id], onDelete: Cascade)
+
+  selectedIn AttemptAnswer[]
+
+  @@index([questionMetaId])
+}
+
+model QuestionMeta {
+  id                String                      @id @default(cuid())
+  question          String                      @db.Text
+  type              QuestionType
+  subject           Subject
+  topic             String
+  level             Level
+  tags              String[]
+  difficulty        Difficulty                  @default(MEDIUM)
+  answer            String?                     @db.Text
+  options           Option[]
+  imgUrl            String?
+  isPublic          Boolean                     @default(false)
+  // embeddings
+  questionEmbedding Unsupported("vector(768)")
+  answerEmbedding   Unsupported("vector(768)")?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  // relations
+  authorId          String
+  author            User                        @relation(fields: [authorId], references: [clerkUserId], onDelete: Cascade)
+  testQuestions     TestQuestion[]
+
+  @@index([authorId])
+  @@index([topic])
+  @@index([difficulty])
+  @@index([createdAt])
+}
+
+model Test {
+  id            String         @id @default(cuid())
+  title         String
+  description   String?
+  duration      Int? // in minutes
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  authorId      String
+  author        User           @relation(fields: [authorId], references: [clerkUserId], onDelete: Cascade)
+  testQuestions TestQuestion[]
+  attempts      TestAttempt[]
+
+  isPublic Boolean @default(false)
+  maxScore      Float     @default(0) // calculated based on the questions added to the test
+
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model TestQuestion {
+  id             String          @id @default(cuid())
+  testId         String
+  test           Test            @relation(fields: [testId], references: [id], onDelete: Cascade)
+  questionMetaId String
+  questionMeta   QuestionMeta    @relation(fields: [questionMetaId], references: [id], onDelete: Cascade)
+  maxScore       Float
+  order          Int
+  createdAt      DateTime        @default(now())
+  attemptAnswers AttemptAnswer[]
+
+  @@unique([testId, order])
+  @@index([testId])
+  @@index([questionMetaId])
+}
+
+enum AttemptState {
+  IN_PROGRESS
+  PAUSED
+  SUBMITTED
+}
+
+model TestAttempt {
+  id          String          @id @default(cuid())
+  testId      String
+  test        Test            @relation(fields: [testId], references: [id], onDelete: Cascade)
+  state       AttemptState    @default(IN_PROGRESS)
+  userId      String
+  user        User            @relation(fields: [userId], references: [clerkUserId], onDelete: Cascade)
+  totalScore  Float           @default(0)
+  startedAt   DateTime        @default(now())
+  lastSeenAt  DateTime        @default(now())
+  timeTaken   Int             @default(0) // in seconds
+  submittedAt DateTime?
+  answers     AttemptAnswer[]
+
+  @@index([testId])
+  @@index([userId])
+  @@index([startedAt])
+}
+
+model AttemptAnswer {
+  id              String       @id @default(cuid())
+  attemptId       String
+  attempt         TestAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  testQuestionId  String
+  testQuestion    TestQuestion @relation(fields: [testQuestionId], references: [id], onDelete: Cascade)
+  // for MCQ / multi-select
+  selectedOptions Option[]
+  // for subjective answers
+  textAnswer      String?      @db.Text
+  // AI/manual evaluation
+  score           Float        @default(0)
+  isCorrect       Boolean      @default(false)
+  feedback        String?      @db.Text
+  createdAt       DateTime     @default(now())
+
+  @@unique([attemptId, testQuestionId])
+  @@index([attemptId])
+  @@index([testQuestionId])
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@repo/shared",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@repo/db": "workspace:*",
+    "dotenv": "^17.4.2",
+    "zod": "^4.4.3"
+  },
+  "exports": {
+    "./types": "./src/types.ts",
+    "./server": "./src/server.ts"
+  }
+}
